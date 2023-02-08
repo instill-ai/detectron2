@@ -80,15 +80,30 @@ def export_scripting(torch_model):
         def __init__(self):
             super().__init__()
             self.model = torch_model
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.eval()
 
     if isinstance(torch_model, GeneralizedRCNN):
 
         class ScriptableAdapter(ScriptableAdapterBase):
-            def forward(self, inputs: Tuple[Dict[str, torch.Tensor]]) -> List[Dict[str, Tensor]]:
+            def forward(self, inputs: Dict[str, torch.Tensor]) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
                 instances = self.model.inference(inputs, do_postprocess=False)
-                return [i.get_fields() for i in instances]
 
+                boxes, labels, scores, masks = [], [], [], []
+                for r in instances:
+                    boxes.append(r.get_fields()["pred_boxes"])
+                    labels.append(r.get_fields()["pred_classes"])
+                    scores.append(r.get_fields()["scores"])
+                    masks.append(r.get_fields()["pred_masks"])
+                max_len_scores = max([len(s) for s in scores])
+                scores = [torch.cat((s.to("cpu"), torch.zeros(max_len_scores - len(s))), 0) for s in scores]
+                max_len_labels = max([len(s) for s in labels])
+                labels = [torch.cat((lb.to("cpu"), torch.zeros(max_len_labels - len(lb))), 0) for lb in labels]
+                max_len_boxes = max([len(s) for s in boxes])
+                boxes = [torch.cat((b.to("cpu"), torch.zeros(max_len_boxes - len(b), 4)), 0) for b in boxes]
+                max_len_masks = max([len(s) for s in masks])
+                masks = [torch.cat((m.to("cpu"), torch.zeros(max_len_masks - len(m), 1, 28, 28)), 0) for m in masks]
+                return torch.stack(boxes).to(self.device), torch.stack(labels).to(self.device), torch.stack(masks).to(self.device), torch.stack(scores).to(self.device)
     else:
 
         class ScriptableAdapter(ScriptableAdapterBase):
@@ -98,6 +113,8 @@ def export_scripting(torch_model):
 
     ts_model = scripting_with_instances(ScriptableAdapter(), fields)
     with PathManager.open(os.path.join(args.output, "model.ts"), "wb") as f:
+        torch.jit.save(ts_model, f)
+    with PathManager.open(os.path.join(args.output, "model.pt"), "wb") as f:
         torch.jit.save(ts_model, f)
     dump_torchscript_IR(ts_model, args.output)
     # TODO inference in Python now missing postprocessing glue code
@@ -146,6 +163,14 @@ def export_tracing(torch_model, inputs):
         input = inputs[0]
         instances = traceable_model.outputs_schema(ts_model(input["image"]))[0]["instances"]
         postprocessed = detector_postprocess(instances, input["height"], input["width"])
+
+        import cv2
+        img = cv2.imread(input["file_name"])
+        from detectron2.utils.visualizer import ColorMode, Visualizer
+        viz = Visualizer(img[:,:,::-1], scale=1.0)
+        output = viz.draw_instance_predictions(postprocessed.to('cpu'))
+        cv2.imwrite('result.jpg', output.get_image()[:,:,::-1])
+
         return [{"instances": postprocessed}]
 
     return eval_wrapper
@@ -214,27 +239,29 @@ if __name__ == "__main__":
     DetectionCheckpointer(torch_model).resume_or_load(cfg.MODEL.WEIGHTS)
     torch_model.eval()
 
+    # get sample data
+    sample_inputs = get_sample_inputs(args)
+
     # convert and save model
     if args.export_method == "caffe2_tracing":
-        sample_inputs = get_sample_inputs(args)
         exported_model = export_caffe2_tracing(cfg, torch_model, sample_inputs)
     elif args.export_method == "scripting":
         exported_model = export_scripting(torch_model)
     elif args.export_method == "tracing":
-        sample_inputs = get_sample_inputs(args)
         exported_model = export_tracing(torch_model, sample_inputs)
 
-    # run evaluation with the converted model
-    if args.run_eval:
-        assert exported_model is not None, (
-            "Python inference is not yet implemented for "
-            f"export_method={args.export_method}, format={args.format}."
-        )
-        logger.info("Running evaluation ... this takes a long time if you export to CPU.")
-        dataset = cfg.DATASETS.TEST[0]
-        data_loader = build_detection_test_loader(cfg, dataset)
-        # NOTE: hard-coded evaluator. change to the evaluator for your dataset
-        evaluator = COCOEvaluator(dataset, output_dir=args.output)
-        metrics = inference_on_dataset(exported_model, data_loader, evaluator)
-        print_csv_format(metrics)
-    logger.info("Success.")
+
+    # # run evaluation with the converted model
+    # if args.run_eval:
+    #     assert exported_model is not None, (
+    #         "Python inference is not yet implemented for "
+    #         f"export_method={args.export_method}, format={args.format}."
+    #     )
+    # logger.info("Running evaluation ... this takes a long time if you export to CPU.")
+    # dataset = cfg.DATASETS.TEST[0]
+    # data_loader = build_detection_test_loader(cfg, dataset)
+    # # NOTE: hard-coded evaluator. change to the evaluator for your dataset
+    # evaluator = COCOEvaluator(dataset, output_dir=args.output)
+    
+    # metrics = inference_on_dataset(exported_model, data_loader, evaluator)
+    # print_csv_format(metrics)

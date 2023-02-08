@@ -123,7 +123,7 @@ class GeneralizedRCNN(nn.Module):
             storage.put_image(vis_name, vis_img)
             break  # only visualize one image in a batch
 
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def forward(self, batched_inputs: Dict[str, torch.Tensor]):
         """
         Args:
             batched_inputs: a list, batched outputs of :class:`DatasetMapper` .
@@ -177,7 +177,7 @@ class GeneralizedRCNN(nn.Module):
 
     def inference(
         self,
-        batched_inputs: List[Dict[str, torch.Tensor]],
+        batched_inputs: Dict[str, torch.Tensor],
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
     ):
@@ -220,11 +220,11 @@ class GeneralizedRCNN(nn.Module):
             return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
         return results
 
-    def preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def preprocess_image(self, batched_inputs: Dict[str, torch.Tensor]):
         """
         Normalize, pad and batch the input images.
         """
-        images = [self._move_to_current_device(x["image"]) for x in batched_inputs]
+        images = [x for x in batched_inputs["image"]]
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(
             images,
@@ -234,14 +234,14 @@ class GeneralizedRCNN(nn.Module):
         return images
 
     @staticmethod
-    def _postprocess(instances, batched_inputs: List[Dict[str, torch.Tensor]], image_sizes):
+    def _postprocess(instances, batched_inputs: Dict[str, torch.Tensor], image_sizes):
         """
         Rescale the output instances to the target size.
         """
         # note: private function; subject to changes
         processed_results = []
         for results_per_image, input_per_image, image_size in zip(
-            instances, batched_inputs, image_sizes
+            instances, [batched_inputs], image_sizes
         ):
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
