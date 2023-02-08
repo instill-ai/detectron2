@@ -49,6 +49,48 @@ And see [projects/](projects/) for some projects that are built on top of detect
 
 We provide a large set of baseline results and trained models available for download in the [Detectron2 Model Zoo](MODEL_ZOO.md).
 
+## ABRC
+
+### Train a custom stomata instance segmentation model
+
+To train a custom stomata instance segmentation model, the dataset is labelled with Label Studio with [EllipseLabels](https://labelstud.io/tags/ellipselabels.html) tag and saved in a `labels.json` JSON file. 
+
+**Training dataset format**
+```bash
+── <dataset-name>
+    ├── labels
+    │   └── labels.json   # Annotation file
+    ├── images            # original images
+    │   ├── x.jpg
+    │   ├── xx.png
+    │   ├── xxx.tif
+    │   └── ...
+    ├── train             # Training set
+    │   ├── x.jpg
+    │   └── xx.jpg
+    └── val               # Validation set
+        ├── x.jpg
+        └── xx.jpg
+```
+
+Then, use the `/abrc/stomata_train.ipynb` script to train a custom model based on the labelled dataset. The trained model is exported to a folder `<dataset-name>_output_ep_<number_of_epochs>_<date>`.
+
+Evaluate a labelled dataset with `/abrc/stomata_evaluation.ipynb`.
+
+### Infer images with a trained stomata instance segmentation model
+
+Follow the format below to organise the images and infer these images with a trained model, use `/abrc/stomata_inference.ipynb`.
+
+**Inference dataset format** 
+```bash
+── <dataset-name>
+    └── images        # images for inference
+        ├── x.jpg
+        ├── xx.png
+        ├── xxx.tif
+        └── ...
+```
+
 ## License
 
 Detectron2 is released under the [Apache 2.0 license](LICENSE).
