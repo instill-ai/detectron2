@@ -55,19 +55,26 @@ def filter_annotations(img_dir, label_filename):
         
         # Check whether images exist with TIFF format
         filename, file_extension = os.path.splitext(img_filename)
-        tif_filename = filename + '.tif'
+        if file_extension == '.tif':
+            img_filename = filename + '.tif'
+        elif file_extension == '.png':
+            img_filename = filename + '.png'
+        elif file_extension == '.jpg':
+            img_filename = filename + '.jpg'
+        else:
+            img_filename = filename
         # if TIFF image file name starts with "2020", removes it
-        if tif_filename.startswith("2020"):
-            tif_filename = tif_filename[4:]
-        tif_img_filepath = os.path.join(img_dir, tif_filename)
+        if img_filename.startswith("2020"):
+            img_filename = img_filename[4:]
+        img_filepath = os.path.join(img_dir, img_filename)
         
-        if os.path.exists(tif_img_filepath):
+        if os.path.exists(img_filepath):
             annotations.append({
-                "image": tif_img_filepath,
+                "image": img_filepath,
                 "annotations": annotation["annotations"][0]["result"]
             }) 
         else:
-            print("Not exist: {}".format(tif_img_filepath))
+            print("Not exist: {}".format(img_filepath))
     return annotations
 
 def gen_ellipse_from_annotation(label):
