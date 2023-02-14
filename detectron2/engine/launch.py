@@ -55,7 +55,6 @@ def launch(
     if world_size > 1:
         # https://github.com/pytorch/pytorch/pull/14391
         # TODO prctl in spawned processes
-
         if dist_url == "auto":
             assert num_machines == 1, "dist_url=auto not supported in multi-machine jobs."
             port = _find_free_port()
