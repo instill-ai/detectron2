@@ -80,7 +80,12 @@ def export_scripting(torch_model):
         def __init__(self):
             super().__init__()
             self.model = torch_model
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if args.device == "cpu":
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
             self.eval()
 
     if isinstance(torch_model, GeneralizedRCNN):
@@ -224,6 +229,12 @@ if __name__ == "__main__":
         help="Modify config options using the command-line",
         default=None,
         nargs=argparse.REMAINDER,
+    )
+    parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda"],
+        help="Device that will run the exported model",
+        default= "cuda",
     )
     args = parser.parse_args()
     logger = setup_logger()

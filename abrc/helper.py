@@ -160,7 +160,18 @@ def draw_annotations(img_filename, annotations, draw_polygon=True, draw_bounding
                 # cv2.fillConvexPoly(img, poly, color=COLORS[category])
     return img
 
-def get_detectron2_dicts_raw(img_dir, json_filename, delta=5):
+def get_detectron2_dicts_abrc(img_dir: str, json_filename: str, delta=5) -> list:
+    r"""
+    This function parse the JSON file prepared by ABRC with Label Studio into a list of COCO compatible annotation dictionaries.
+    
+    Retrun a list of:
+        - COCO compatiable annotation dictionaries. Each dictionay consists of these indices:
+            - file_name
+            - image_id
+            - height, 
+            - width, 
+            - annotations
+    """
     labelstudio_annotations = filter_annotations(img_dir, json_filename)
     dataset_dicts = []
     for idx, v in enumerate(labelstudio_annotations):
@@ -209,3 +220,87 @@ def get_detectron2_dicts_raw(img_dir, json_filename, delta=5):
 def get_detectron2_dicts(json_filename):
     with open(json_filename, 'r') as f:
         return json.load(f)
+
+
+def shuffle_datset(label_dicts: list, seed_num):
+    r"""
+    # random shuffle a list of label dictionaries
+    
+    Args:
+     - label_dicts (list): list of label dictionaries consisting annotations.
+     - seed_num: seed for Python randon function.
+    """    
+    random.seed(seed_num)
+    print("Randomly shuffle label dicts...")
+
+
+
+def split_dataset(label_dicts: list, split_ratio: list) -> dict:
+    r"""
+    split dataset into three subsets: train, val and test.
+    
+    Args:
+     - label_dicts (list): is the label dictionary. User must shuffle before split.
+     - split_ratio (list): this is a list consisting of the ratio between train, val, test.
+       e.g. split_ratio = [8,1,1] denotes train:val:test = 8:1:1
+    """
+    
+    # split dataset
+    train_num = int(len(label_dicts) * (split_ratio[0]/sum(split_ratio)))
+    val_num = int(len(label_dicts) * (split_ratio[1]/sum(split_ratio)))
+    test_num = int(len(label_dicts) * (split_ratio[2]/sum(split_ratio)))
+    print(f"set [train:val:test] to [{train_num}:{val_num}:{test_num}]")
+    
+    # initialise variables
+    label_cat = {}
+    label_cat['train'] = label_dicts[:train_num]
+    label_cat['val'] = label_dicts[train_num:train_num+val_num]
+    label_cat['test'] = label_dicts[train_num+val_num:]
+    
+    return  label_cat
+
+def save_ext_dataset(dataset_name: str, data_path: str, label_cat: dict):
+    r"""
+    save dataset and label to its correponding folders.
+    
+    Args:
+     - dataset_name (str): name of the dataset.
+     - dataset_path (str): path of the dataset.
+     - label_cat (dict): a dictionary consisting of the labels of train, val and test set. Get this with function split_dataset()
+    """
+
+    # iterate through different subset.
+    for d in ['train', 'val', 'test']:
+        
+        # INITIALISATION for {d}
+        # set up output dir for {d}
+        sub_img_dir = os.path.join(data_path, dataset_name, d)
+        shutil.rmtree(sub_img_dir, ignore_errors=True)
+        os.makedirs(sub_img_dir, exist_ok=True)
+        
+        # set up label file for {d}
+        sub_label_filenames = os.path.join(data_path, dataset_name, 'labels', f"labels_{d}.json")
+        open(sub_label_filenames, 'w').close() # reset file
+        
+        # CREATE CORRESPONDING SET for {d}
+        # construct label file
+        with open(sub_label_filenames, 'a') as f:
+            f.write('[')
+                
+        # extract training and validation imgs and labels from /images and labels.json
+        for idx, v in enumerate(label_cat[d]):
+            
+            # copy training set from images to /train
+            dst = os.path.join(sub_img_dir, os.path.basename(v["file_name"]))
+            shutil.copyfile(v["file_name"], dst)
+            
+            # save dict to label_train.json
+            with open(sub_label_filenames, 'a') as f:
+                json.dump(v, f)
+                if idx < len(label_cat[d]) - 1: # do not add , at the end of the 
+                    f.write(',')
+                    
+        with open(sub_label_filenames, 'a') as f:
+            f.write(']')
+            f.close()
+    
