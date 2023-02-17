@@ -1,7 +1,7 @@
 python ../tools/deploy/export_model.py \
 --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml \
 --format torchscript --export-method scripting \
---output export/stomata200-mix/cpu \
+--output export/stomata200-mix-test/cpu \
 --sample-image ../../google-drive/stomata200-mix/images/0611_01-01.3.4.tif \
 --device cpu \
 MODEL.WEIGHTS output/stomata200-mix_output_ep32000_2023_02_14_19_32_50/train_output/model_final.pth \

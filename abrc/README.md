@@ -62,15 +62,15 @@ There are many ways to augmentation in computer vision and instance segmentation
 
 ### STEP 3: Training and Validation
 
-Run `stomata_train.ipynb`
+Run `stomata_train.ipynb`. Output models and validation results are saved under `output` folder.
 
 ### STEP 5: Inference Example (Optional)
 
-Run `stomata_inference.ipynb`
+Run `stomata_inference.ipynb`. Inference outputs will be saved under `dataset_dir/inference_outputs`. It may take longer time for inference at the moment. Ensure you use set `cfg.MODEL.DEVICE = "cuda" ` for faster inferencing.
 
 ### STEP 6: Testing / Evaluation (Optional)
 
-Run `stomata_evaluation.ipynb`
+Run `stomata_evaluation.ipynb`. 
 
 ## Model Export
 

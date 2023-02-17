@@ -17,6 +17,7 @@ from detectron2.utils.visualizer import Visualizer
 from detectron2.data import MetadataCatalog, DatasetCatalog
 from detectron2.structures import BoxMode
 
+from skimage import measure
 
 CATEGORIES = ["Open", "close", "Unknown"]
 COLORS = {
@@ -231,6 +232,7 @@ def shuffle_datset(label_dicts: list, seed_num):
      - seed_num: seed for Python randon function.
     """    
     random.seed(seed_num)
+    random.shuffle(label_dicts)
     print("Randomly shuffle label dicts...")
 
 
@@ -304,3 +306,115 @@ def save_ext_dataset(dataset_name: str, data_path: str, label_cat: dict):
             f.write(']')
             f.close()
     
+    
+    
+########### For Inferences ############
+def random_color() -> list:
+    return [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
+
+def get_inference_dicts(img_dir, extensions=None):
+    if extensions is None:
+        extensions = [".png", ".tif", "jpg"]
+        
+    dataset_dicts = []
+    img_idx = 0
+    for ext in extensions:
+        for fname in os.listdir(img_dir):
+            # check the file ends with the extension
+            if fname.endswith(ext):
+                img_filepath = os.path.join(img_dir, fname)
+                record = {}
+                img_h, img_w = cv2.imread(img_filepath).shape[:2]
+                record["file_name"] = img_filepath
+                record["image_id"] = img_idx
+                record["height"] = img_h
+                record["width"] = img_w
+                
+                dataset_dicts.append(record)
+                img_idx += 1
+    return dataset_dicts
+
+def binary_mask_to_polygon(binary_mask, tolerance=0):
+    r""" Converts a binary mask to COCO polygon representation
+    Args:
+        binary_mask: a 2D binary numpy array where '1's represent the object
+        tolerance: Maximum distance from original points of polygon to approximated polygonal chain. If tolerance is 0, the original coordinate array is returned.
+    
+    """
+    def close_contour(contour):
+        if not np.array_equal(contour[0], contour[-1]):
+            contour = np.vstack((contour, contour[0]))
+        return contour
+    
+    polygons = []
+    # pad mask to close contours of shapes which start and end at an edge
+    padded_binary_mask = np.pad(binary_mask, pad_width=1, mode='constant', constant_values=0)
+    contours = measure.find_contours(padded_binary_mask, 0.5)
+    for contour in contours:
+        contour = close_contour(contour)
+        if len(contour) < 3:
+            continue
+        contour = np.flip(contour, axis=1)
+        segmentation = contour.ravel().tolist()
+        # after padding and subtracting 1 we may get -0.5 points in our segmentation
+#         segmentation = [0 if i < 0 else i for i in segmentation]
+        polygons.append(segmentation)
+    return polygons
+
+def fit_polygens_to_rotated_bboxes(polygons):
+    rbboxes = []
+    for p in polygons:
+        pts_x = p[::2]
+        pts_y = p[1::2]
+        pts = [[x, y] for x,y in zip(pts_x, pts_y)]
+        pts = np.array(pts, np.float32)
+        rect = cv2.minAreaRect(pts)  #  ((cx, cy), (w, h), a)
+        rbboxes.append(rect)
+    return rbboxes
+
+def draw_polygons(img_filename, polygons, texts, thickness=1):
+    img = cv2.imread(img_filename)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    tl = thickness
+    tf = max(tl-1, 1)
+    for p, text in zip(polygons, texts):
+        color = random_color()
+        pts_x = p[::2]
+        pts_y = p[1::2]
+        pts = [[x, y] for x,y in zip(pts_x, pts_y)]
+        pts = np.array(pts, np.int32)
+        cv2.polylines(img, [pts], isClosed=True, thickness=thickness, color=color)
+        # bounding box format: (tlx, tly, w, h)
+        x, y, w, h = cv2.boundingRect(pts)
+        cv2.rectangle(img, pt1=(x, y), pt2=(x+w, y+h), color=color, thickness=thickness, lineType=cv2.LINE_AA)
+        t_size = cv2.getTextSize(text, 0, fontScale=tl/3, thickness=thickness)[0]
+        c1 = (x, y)
+        c2 = c1[0] + t_size[0], c1[1] - t_size[1] -3
+        cv2.rectangle(img, c1, c2, color=color, thickness=-1, lineType=cv2.LINE_AA)  # filled
+        cv2.putText(img, text, (c1[0], c1[1]-2), 0, tl/3, [255,255,255], thickness=tf, lineType=cv2.LINE_AA)
+    return img
+
+def draw_rotated_bboxes(img_filename, rboxes, texts, thickness=1, color=None):
+    img = cv2.imread(img_filename)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = draw_rotated_bboxes_on_image(img, rboxes, texts, thickness, color)
+    return img
+
+def draw_rotated_bboxes_on_image(img, rboxes, texts, thickness=1, color=None):
+    img_draw = img.copy()
+    tl = thickness
+    tf = max(tl-1, 1)
+    for rb, text in zip(rboxes, texts):
+        c = random_color() if color is None else color
+        box = cv2.boxPoints(rb)
+        box = np.int0(box)
+        cv2.drawContours(img_draw, [box], 0, color=c, thickness=thickness)
+        t_size = cv2.getTextSize(text, 0, fontScale=tl/3, thickness=thickness)[0]
+        pt = np.amin(box, axis=0)
+        c1 = (pt[0], pt[1])
+        c2 = c1[0] + t_size[0], c1[1] - t_size[1] -3
+        cv2.rectangle(img_draw, c1, c2, color=color, thickness=-1, lineType=cv2.LINE_AA)  # filled
+        cv2.putText(img_draw, text, (c1[0], c1[1]-2), 0, tl/3, [255,255,255], thickness=tf, lineType=cv2.LINE_AA)
+    return img_draw
+
+
